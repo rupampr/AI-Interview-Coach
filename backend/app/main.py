@@ -24,7 +24,7 @@ app = FastAPI(title=settings.app_name)
 # Allow the Next.js frontend (running on a different port) to call this API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["https://ai-interview-coach-eight-eosin.vercel.app/"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
