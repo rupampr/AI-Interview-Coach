@@ -1,6 +1,3 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
-sentence-transformers
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35
@@ -14,6 +11,5 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 pymupdf
 python-multipart==0.0.9
-google-genai
-alembic
+google-generativeai
 numpy

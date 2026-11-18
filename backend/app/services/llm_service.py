@@ -1,9 +1,21 @@
 import os
 import json
-from google import genai
+import logging
+import google.generativeai as genai
+
+logger = logging.getLogger(__name__)
 
 
-client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+def get_gemini_model():
+    """Lazily configure and return the Gemini GenerativeModel."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY environment variable is not set. Please set it in your environment.")
+    genai.configure(api_key=api_key)
+    # Default to fast, stable, and cost-effective Gemini 2.0 Flash / 1.5 Flash
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+    return genai.GenerativeModel(model_name)
+
 
 def generate_interview_questions(
     jd_text: str,
@@ -49,10 +61,8 @@ Example format:
 [{{"question": "...", "category": "technical", "difficulty": "medium"}}]
 """
 
-    response = client.models.generate_content(
-    model='gemini-3.6-flash',
-    contents=prompt,
-    )
+    model = get_gemini_model()
+    response = model.generate_content(prompt)
     raw_output = response.text.strip()
 
     # Gemini sometimes wraps output in ```json ... ``` despite instructions —
@@ -108,10 +118,8 @@ Example format:
 {{"technical_score": 7.5, "relevance_score": 8, "completeness_score": 6.5, "clarity_score": 8, "communication_score": 7, "overall_score": 7.4, "feedback": "..."}}
 """
 
-    response = client.models.generate_content(
-        model='gemini-3.6-flash',
-        contents=prompt,
-    )
+    model = get_gemini_model()
+    response = model.generate_content(prompt)
     raw_output = response.text.strip()
 
     if raw_output.startswith("```"):
@@ -165,10 +173,8 @@ Use exactly these keys: "strengths", "weaknesses", "improvement_areas", "summary
 "summary_text" must be a single string.
 """
 
-    response = client.models.generate_content(
-        model='gemini-3.6-flash',
-        contents=prompt,
-    )
+    model = get_gemini_model()
+    response = model.generate_content(prompt)
     raw_output = response.text.strip()
 
     if raw_output.startswith("```"):
