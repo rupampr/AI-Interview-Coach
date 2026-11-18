@@ -1,11 +1,9 @@
 import os
 import json
-import google.generativeai as genai
+from google import genai
 
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
 
-_model = genai.GenerativeModel("gemini-3.6-flash")
-
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 def generate_interview_questions(
     jd_text: str,
@@ -51,7 +49,10 @@ Example format:
 [{{"question": "...", "category": "technical", "difficulty": "medium"}}]
 """
 
-    response = _model.generate_content(prompt)
+    response = client.models.generate_content(
+    model='gemini-3.6-flash',
+    contents=prompt,
+    )
     raw_output = response.text.strip()
 
     # Gemini sometimes wraps output in ```json ... ``` despite instructions —
@@ -107,7 +108,10 @@ Example format:
 {{"technical_score": 7.5, "relevance_score": 8, "completeness_score": 6.5, "clarity_score": 8, "communication_score": 7, "overall_score": 7.4, "feedback": "..."}}
 """
 
-    response = _model.generate_content(prompt)
+    response = client.models.generate_content(
+        model='gemini-3.6-flash',
+        contents=prompt,
+    )
     raw_output = response.text.strip()
 
     if raw_output.startswith("```"):
@@ -161,7 +165,10 @@ Use exactly these keys: "strengths", "weaknesses", "improvement_areas", "summary
 "summary_text" must be a single string.
 """
 
-    response = _model.generate_content(prompt)
+    response = client.models.generate_content(
+        model='gemini-3.6-flash',
+        contents=prompt,
+    )
     raw_output = response.text.strip()
 
     if raw_output.startswith("```"):

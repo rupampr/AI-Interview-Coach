@@ -3,6 +3,7 @@ App entrypoint. Run with:
     uvicorn app.main:app --reload
 (or via Docker Compose, see ../docker-compose.yml)
 """
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,11 +22,20 @@ from app import models  # noqa: F401
 
 app = FastAPI(title=settings.app_name)
 
-# Allow the Next.js frontend (running on a different port) to call this API.
+# Allow the Next.js frontend (running on a different port/domain) to call this API.
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://ai-interview-coach-eight-eosin.vercel.app",
+]
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url:
+    origins.append(frontend_url.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000",
-        "https://ai-interview-coach-eight-eosin.vercel.app",],
+    allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
