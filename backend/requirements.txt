@@ -12,4 +12,5 @@ bcrypt==4.0.1
 pymupdf
 python-multipart==0.0.9
 google-generativeai
+google-genai
 numpy

@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 def generate_embedding(text: str) -> list[float]:
     """
-    Converts text into an embedding vector using Google Gemini's text-embedding-004 API.
+    Converts text into an embedding vector using Google Gemini's embedding API.
     
     Why this approach:
     Using local PyTorch + SentenceTransformers requires >500MB of RAM, causing
@@ -17,17 +17,42 @@ def generate_embedding(text: str) -> list[float]:
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if api_key:
+        # 1. Try modern google-genai SDK
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            result = genai.embed_content(
-                model="models/text-embedding-004",
-                content=text[:2048],
-                task_type="semantic_similarity",
-            )
-            return result["embedding"]
+            from google import genai
+            client = genai.Client(api_key=api_key)
+            for m_name in ["gemini-embedding-001", "gemini-embedding-2"]:
+                try:
+                    res = client.models.embed_content(
+                        model=m_name,
+                        contents=text[:2048],
+                    )
+                    if hasattr(res, "embeddings") and res.embeddings and len(res.embeddings) > 0:
+                        return list(res.embeddings[0].values)
+                except Exception as e:
+                    logger.debug(f"google-genai embedding model {m_name} failed: {e}")
+                    continue
+        except ImportError:
+            pass
+
+        # 2. Try legacy google.generativeai SDK
+        try:
+            import google.generativeai as legacy_genai
+            legacy_genai.configure(api_key=api_key)
+            for m_name in ["models/gemini-embedding-001", "models/text-embedding-004"]:
+                try:
+                    result = legacy_genai.embed_content(
+                        model=m_name,
+                        content=text[:2048],
+                        task_type="semantic_similarity",
+                    )
+                    if "embedding" in result:
+                        return result["embedding"]
+                except Exception as e:
+                    logger.debug(f"legacy genai embedding model {m_name} failed: {e}")
+                    continue
         except Exception as e:
-            logger.warning(f"Google Gemini embedding failed: {e}. Using lightweight fallback vector.")
+            logger.warning(f"Legacy Google Gemini embedding failed: {e}")
 
     # Lightweight deterministic hashing fallback (0 MB memory overhead)
     # Generates a normalized 128-dimensional vector if API is unreachable or during tests

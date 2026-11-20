@@ -48,7 +48,16 @@ def match_resume_to_jd(
     if not job_description.embedding:
         raise HTTPException(status_code=422, detail="Job description has no embedding.")
 
-    # 3. Compute similarity
+    # 3. Synchronize vector dimensions if resume was embedded with a previous model
+    if len(resume.embedding) != len(job_description.embedding):
+        from app.services.embedding_service import generate_embedding
+        if resume.raw_text:
+            resume.embedding = generate_embedding(resume.raw_text)
+            db.add(resume)
+            db.commit()
+            db.refresh(resume)
+
+    # 4. Compute similarity
     score = cosine_similarity(resume.embedding, job_description.embedding)
 
     # 4. Compute skill overlap

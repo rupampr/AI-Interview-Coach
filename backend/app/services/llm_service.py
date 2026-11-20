@@ -1,20 +1,94 @@
 import os
 import json
 import logging
-import google.generativeai as genai
+import re
 
 logger = logging.getLogger(__name__)
 
 
-def get_gemini_model():
-    """Lazily configure and return the Gemini GenerativeModel."""
+def call_gemini(prompt: str) -> str:
+    """
+    Calls Google Gemini using either google-genai or google.generativeai SDK.
+    Gracefully handles whichever package is installed in the environment
+    and falls back across model versions if a model is deprecated/404/503.
+    """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise ValueError("GEMINI_API_KEY environment variable is not set. Please set it in your environment.")
-    genai.configure(api_key=api_key)
-    # Default to fast, stable, and cost-effective Gemini 2.0 Flash / 1.5 Flash
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
-    return genai.GenerativeModel(model_name)
+        raise ValueError("GEMINI_API_KEY environment variable is not set. Please set it in your .env file or cloud environment.")
+
+    preferred_model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    models_to_try = [preferred_model]
+    for m in [
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-3.5-flash",
+        "gemini-flash-lite-latest",
+        "gemini-3.8-flash",
+    ]:
+        if m not in models_to_try:
+            models_to_try.append(m)
+
+    last_error = None
+
+    # 1. Try google-genai (modern official Google GenAI SDK)
+    try:
+        from google import genai as new_genai
+        client = new_genai.Client(api_key=api_key)
+        for m_name in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=m_name,
+                    contents=prompt,
+                )
+                if response and response.text:
+                    return response.text.strip()
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Model {m_name} failed with google-genai: {e}. Trying next candidate...")
+                continue
+    except ImportError:
+        pass
+
+    # 2. Try google.generativeai (legacy SDK)
+    try:
+        import google.generativeai as legacy_genai
+        legacy_genai.configure(api_key=api_key)
+        for m_name in models_to_try:
+            try:
+                model = legacy_genai.GenerativeModel(m_name)
+                response = model.generate_content(prompt)
+                if response and response.text:
+                    return response.text.strip()
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Model {m_name} failed with google.generativeai: {e}. Trying next candidate...")
+                continue
+    except ImportError:
+        pass
+
+    if last_error:
+        raise last_error
+
+    raise ModuleNotFoundError(
+        "Neither 'google-genai' nor 'google-generativeai' is installed in this Python environment.\n"
+        "Please run: pip install google-genai google-generativeai\n"
+        "Or if using Docker, rebuild your container: docker compose up --build"
+    )
+
+
+def _clean_json_output(raw_output: str) -> str:
+    """Helper to extract clean JSON string from LLM response, stripping code blocks."""
+    cleaned = raw_output.strip()
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
+    if match:
+        cleaned = match.group(1).strip()
+    elif cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+    return cleaned
 
 
 def generate_interview_questions(
@@ -61,20 +135,11 @@ Example format:
 [{{"question": "...", "category": "technical", "difficulty": "medium"}}]
 """
 
-    model = get_gemini_model()
-    response = model.generate_content(prompt)
-    raw_output = response.text.strip()
-
-    # Gemini sometimes wraps output in ```json ... ``` despite instructions —
-    # strip that defensively rather than trusting the prompt alone
-    if raw_output.startswith("```"):
-        raw_output = raw_output.strip("`")
-        if raw_output.startswith("json"):
-            raw_output = raw_output[4:]
-        raw_output = raw_output.strip()
+    raw_output = call_gemini(prompt)
+    cleaned = _clean_json_output(raw_output)
 
     try:
-        questions = json.loads(raw_output)
+        questions = json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise ValueError(f"LLM did not return valid JSON: {e}\nRaw output: {raw_output}")
 
@@ -118,18 +183,11 @@ Example format:
 {{"technical_score": 7.5, "relevance_score": 8, "completeness_score": 6.5, "clarity_score": 8, "communication_score": 7, "overall_score": 7.4, "feedback": "..."}}
 """
 
-    model = get_gemini_model()
-    response = model.generate_content(prompt)
-    raw_output = response.text.strip()
-
-    if raw_output.startswith("```"):
-        raw_output = raw_output.strip("`")
-        if raw_output.startswith("json"):
-            raw_output = raw_output[4:]
-        raw_output = raw_output.strip()
+    raw_output = call_gemini(prompt)
+    cleaned = _clean_json_output(raw_output)
 
     try:
-        evaluation = json.loads(raw_output)
+        evaluation = json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise ValueError(f"LLM did not return valid JSON: {e}\nRaw output: {raw_output}")
 
@@ -142,6 +200,7 @@ Example format:
         raise ValueError(f"LLM response missing keys: {missing_keys}")
 
     return evaluation
+
 
 def generate_report_summary(qa_pairs: list[dict]) -> dict:
     """
@@ -173,18 +232,11 @@ Use exactly these keys: "strengths", "weaknesses", "improvement_areas", "summary
 "summary_text" must be a single string.
 """
 
-    model = get_gemini_model()
-    response = model.generate_content(prompt)
-    raw_output = response.text.strip()
-
-    if raw_output.startswith("```"):
-        raw_output = raw_output.strip("`")
-        if raw_output.startswith("json"):
-            raw_output = raw_output[4:]
-        raw_output = raw_output.strip()
+    raw_output = call_gemini(prompt)
+    cleaned = _clean_json_output(raw_output)
 
     try:
-        result = json.loads(raw_output)
+        result = json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise ValueError(f"LLM did not return valid JSON: {e}\nRaw output: {raw_output}")
 

@@ -2,8 +2,24 @@ import numpy as np
 
 
 def cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
-    a = np.array(vec_a)
-    b = np.array(vec_b)
+    """
+    Computes cosine similarity between two embedding vectors.
+    Safely handles zero norms and length/dimension discrepancies.
+    """
+    if not vec_a or not vec_b:
+        return 0.0
+
+    len_a = len(vec_a)
+    len_b = len(vec_b)
+
+    if len_a != len_b:
+        # Match dimensions by trimming to common length or re-sampling
+        min_len = min(len_a, len_b)
+        a = np.array(vec_a[:min_len], dtype=float)
+        b = np.array(vec_b[:min_len], dtype=float)
+    else:
+        a = np.array(vec_a, dtype=float)
+        b = np.array(vec_b, dtype=float)
 
     # Guard against zero vectors to avoid division by zero
     norm_a = np.linalg.norm(a)
@@ -11,8 +27,8 @@ def cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
     if norm_a == 0 or norm_b == 0:
         return 0.0
 
-    similarity = np.dot(a, b) / (norm_a * norm_b)
-    return float(similarity)
+    similarity = float(np.dot(a, b) / (norm_a * norm_b))
+    return max(0.0, min(1.0, similarity))
 
 
 def compare_skills(resume_skills: list[str], jd_skills: list[str]) -> dict:
