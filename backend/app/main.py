@@ -49,6 +49,16 @@ def on_startup():
     Base.metadata.create_all(bind=engine)
 
 
+@app.get("/", tags=["root"])
+def root():
+    return {
+        "app": settings.app_name,
+        "status": "online",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
 @app.get("/health", tags=["health"])
 def health_check():
     return {"status": "ok", "environment": settings.environment}
