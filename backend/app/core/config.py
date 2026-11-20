@@ -6,11 +6,20 @@ and .env.example). Keeping config in one place means no secrets are
 hardcoded anywhere else in the codebase.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
     # --- Database ---
     database_url: str = "postgresql://postgres:postgres@db:5432/interview_coach"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def fix_postgres_url_scheme(cls, v: str) -> str:
+        # Render and some cloud providers output postgres:// which SQLAlchemy 1.4+ rejects
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql://", 1)
+        return v
 
     # --- Auth / JWT ---
     jwt_secret_key: str = "change-this-in-production"
