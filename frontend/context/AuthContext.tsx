@@ -18,8 +18,6 @@ interface AuthContextType {
   loginWithGoogle: (payload: {
     credential?: string;
     access_token?: string;
-    email?: string;
-    full_name?: string;
   }) => Promise<void>;
   logout: () => void;
 }
@@ -54,8 +52,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithGoogle = async (payload: {
     credential?: string;
     access_token?: string;
-    email?: string;
-    full_name?: string;
   }) => {
     const data = await googleLoginUser(payload);
     saveToken(data.access_token);

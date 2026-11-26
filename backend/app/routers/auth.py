@@ -85,7 +85,7 @@ def google_oauth_callback(code: str, db: Session = Depends(get_db)):
     """
     Standard Google OAuth 2.0 Callback Endpoint.
     Receives auth code from Google, exchanges it for access token,
-    retrieves user profile, provisions account in PostgreSQL,
+    retrieves user profile from Google Cloud, provisions account in PostgreSQL,
     and redirects user to frontend dashboard with application JWT.
     """
     client_id = os.environ.get("GOOGLE_CLIENT_ID")
@@ -168,23 +168,20 @@ def google_oauth_callback(code: str, db: Session = Depends(get_db)):
 def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
     """
     Client-side Google Identity Services (GIS) / OAuth 2.0 Endpoint.
-    Accepts:
-    1. Google ID token (credential) from Google Identity Services
-    2. OAuth2 access_token
-    3. Dev/demo mode credentials for sandbox testing
+    Strictly verifies Google ID tokens or OAuth2 access tokens against Google Cloud servers.
     """
+    if not payload.credential and not payload.access_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either credential (Google ID token) or access_token must be provided",
+        )
+
     email = None
     full_name = None
 
-    # Handle demo/dev mode token
-    if payload.credential == "demo-google-credential":
-        email = payload.email or "google.user@example.com"
-        full_name = payload.full_name or "Google Verified User"
-
-    # Option 1: Validate Google ID Token (JWT)
-    elif payload.credential:
+    # Option 1: Validate Google ID Token (JWT) directly with Google
+    if payload.credential:
         verified = False
-        # Try google.oauth2.id_token library
         try:
             from google.oauth2 import id_token
             from google.auth.transport import requests as google_requests
@@ -199,9 +196,8 @@ def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
             full_name = id_info.get("name")
             verified = True
         except Exception as e:
-            logger.debug(f"google.oauth2.id_token verification failed: {e}. Trying Google tokeninfo API...")
+            logger.debug(f"google.oauth2.id_token verification error: {e}. Trying Google tokeninfo API...")
 
-        # Fallback to Google's public tokeninfo endpoint
         if not verified:
             try:
                 url = f"https://oauth2.googleapis.com/tokeninfo?id_token={payload.credential}"

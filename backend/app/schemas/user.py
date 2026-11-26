@@ -16,10 +16,8 @@ class UserLogin(BaseModel):
 
 
 class GoogleAuthRequest(BaseModel):
-    credential: str | None = None  # Google ID Token from Google Identity Services
-    access_token: str | None = None  # OAuth2 access token
-    email: EmailStr | None = None  # Optional fallback for simulated/dev mode
-    full_name: str | None = None
+    credential: str | None = None  # Google ID Token (JWT) from Google Cloud
+    access_token: str | None = None  # OAuth2 Access Token from Google Cloud
 
 
 class UserOut(BaseModel):
