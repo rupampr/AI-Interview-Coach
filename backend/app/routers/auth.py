@@ -2,8 +2,10 @@ import os
 import json
 import secrets
 import urllib.request
+import urllib.parse
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -50,11 +52,123 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return Token(access_token=access_token)
 
 
+@router.get("/google/login")
+def google_oauth_redirect():
+    """
+    Standard Google OAuth 2.0 Authorization Endpoint.
+    Redirects the browser directly to Google's official accounts authorization screen.
+    """
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    if not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GOOGLE_CLIENT_ID environment variable is not configured on the backend.",
+        )
+
+    backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", f"{backend_url.rstrip('/')}/auth/google/callback")
+
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    google_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+    return RedirectResponse(url=google_url)
+
+
+@router.get("/google/callback")
+def google_oauth_callback(code: str, db: Session = Depends(get_db)):
+    """
+    Standard Google OAuth 2.0 Callback Endpoint.
+    Receives auth code from Google, exchanges it for access token,
+    retrieves user profile, provisions account in PostgreSQL,
+    and redirects user to frontend dashboard with application JWT.
+    """
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", f"{backend_url.rstrip('/')}/auth/google/callback")
+
+    if not client_id or not client_secret:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is missing on the server.",
+        )
+
+    # 1. Exchange authorization code for tokens
+    token_url = "https://oauth2.googleapis.com/token"
+    payload = urllib.parse.urlencode({
+        "code": code,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        token_url,
+        data=payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            token_response = json.loads(response.read().decode("utf-8"))
+    except Exception as e:
+        logger.error(f"Failed to exchange Google OAuth code: {e}")
+        return RedirectResponse(f"{frontend_url.rstrip('/')}/login?error=Google%20OAuth%20code%20exchange%20failed")
+
+    access_token = token_response.get("access_token")
+    if not access_token:
+        return RedirectResponse(f"{frontend_url.rstrip('/')}/login?error=No%20access%20token%20returned%20by%20Google")
+
+    # 2. Fetch user profile from Google userinfo API
+    try:
+        userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+        req = urllib.request.Request(
+            userinfo_url,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            profile = json.loads(response.read().decode("utf-8"))
+    except Exception as e:
+        logger.error(f"Failed to fetch Google userinfo: {e}")
+        return RedirectResponse(f"{frontend_url.rstrip('/')}/login?error=Failed%20to%20fetch%20Google%20profile")
+
+    email = profile.get("email")
+    full_name = profile.get("name")
+    if not email:
+        return RedirectResponse(f"{frontend_url.rstrip('/')}/login?error=No%20email%20provided%20by%20Google")
+
+    # 3. Retrieve or create user record
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        user = User(
+            email=email,
+            full_name=full_name or email.split("@")[0],
+            hashed_password=hash_password(secrets.token_urlsafe(32)),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    elif full_name and not user.full_name:
+        user.full_name = full_name
+        db.commit()
+
+    # 4. Issue application JWT and redirect
+    app_jwt = create_access_token(subject=str(user.id))
+    return RedirectResponse(f"{frontend_url.rstrip('/')}/login?google_token={app_jwt}")
+
+
 @router.post("/google", response_model=Token)
 def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
     """
-    Authenticates a user via Google Sign-In.
-    Accepts either:
+    Client-side Google Identity Services (GIS) / OAuth 2.0 Endpoint.
+    Accepts:
     1. Google ID token (credential) from Google Identity Services
     2. OAuth2 access_token
     3. Dev/demo mode credentials for sandbox testing
@@ -65,7 +179,7 @@ def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
     # Handle demo/dev mode token
     if payload.credential == "demo-google-credential":
         email = payload.email or "google.user@example.com"
-        full_name = payload.full_name or "Google Test User"
+        full_name = payload.full_name or "Google Verified User"
 
     # Option 1: Validate Google ID Token (JWT)
     elif payload.credential:

@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { saveToken } from "@/lib/auth";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import {
   Sparkles,
@@ -68,6 +69,18 @@ function LoginForm() {
   const router = useRouter();
 
   const isJustRegistered = searchParams.get("registered") === "true";
+
+  useEffect(() => {
+    const googleToken = searchParams.get("google_token");
+    const oauthError = searchParams.get("error");
+    if (oauthError) {
+      setError(oauthError);
+    } else if (googleToken) {
+      setLoading(true);
+      saveToken(googleToken);
+      window.location.href = "/dashboard";
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
