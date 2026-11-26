@@ -3,17 +3,24 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { getToken, saveToken, clearToken } from "@/lib/auth";
-import { getMe, loginUser } from "@/lib/api";
+import { getMe, loginUser, googleLoginUser } from "@/lib/api";
 
 interface User {
   id: string;
   email: string;
+  full_name?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (payload: {
+    credential?: string;
+    access_token?: string;
+    email?: string;
+    full_name?: string;
+  }) => Promise<void>;
   logout: () => void;
 }
 
@@ -38,7 +45,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const data = await loginUser(email, password);
-    // Adjust this key if your /auth/login response uses a different field name
+    saveToken(data.access_token);
+    const me = await getMe();
+    setUser(me);
+    router.push("/dashboard");
+  };
+
+  const loginWithGoogle = async (payload: {
+    credential?: string;
+    access_token?: string;
+    email?: string;
+    full_name?: string;
+  }) => {
+    const data = await googleLoginUser(payload);
     saveToken(data.access_token);
     const me = await getMe();
     setUser(me);
@@ -52,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );

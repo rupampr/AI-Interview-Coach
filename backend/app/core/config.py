@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24  # 24 hours
+    google_client_id: str | None = None
 
     # --- App ---
     app_name: str = "AI Interview Coach API"

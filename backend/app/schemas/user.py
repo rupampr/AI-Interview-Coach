@@ -15,6 +15,13 @@ class UserLogin(BaseModel):
     password: str
 
 
+class GoogleAuthRequest(BaseModel):
+    credential: str | None = None  # Google ID Token from Google Identity Services
+    access_token: str | None = None  # OAuth2 access token
+    email: EmailStr | None = None  # Optional fallback for simulated/dev mode
+    full_name: str | None = None
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

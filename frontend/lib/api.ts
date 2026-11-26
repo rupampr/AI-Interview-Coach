@@ -65,6 +65,17 @@ export const loginUser = async (email: string, password: string) => {
   return res.json();
 };
 
+export const googleLoginUser = async (payload: {
+  credential?: string;
+  access_token?: string;
+  email?: string;
+  full_name?: string;
+}) =>
+  request("/auth/google", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
 export const getMe = () => request("/auth/me");
 
 // ---------- Resume ----------

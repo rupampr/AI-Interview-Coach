@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import {
   Sparkles,
   Mail,
@@ -162,17 +163,10 @@ function LoginForm() {
 
         {/* Social Sign In Buttons */}
         <div className="grid grid-cols-2 gap-3">
+          <GoogleSignInButton onError={(msg) => setError(msg)} label="Google" />
           <button
             type="button"
-            onClick={() => setError("OAuth integration is disabled in local development mode. Please sign in with email/password.")}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-800/80 border border-white/10 hover:border-white/20 text-xs font-semibold text-zinc-300 hover:text-white transition-all shadow-sm"
-          >
-            <GoogleIcon className="w-4 h-4" />
-            <span>Google</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setError("OAuth integration is disabled in local development mode. Please sign in with email/password.")}
+            onClick={() => setError("GitHub OAuth integration can be enabled with GITHUB_CLIENT_ID. Please use Google Sign-In or email/password.")}
             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-800/80 border border-white/10 hover:border-white/20 text-xs font-semibold text-zinc-300 hover:text-white transition-all shadow-sm"
           >
             <GithubIcon className="w-4 h-4" />

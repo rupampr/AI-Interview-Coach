@@ -13,4 +13,5 @@ pymupdf
 python-multipart==0.0.9
 google-generativeai
 google-genai
+google-auth
 numpy
